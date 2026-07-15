@@ -43,18 +43,18 @@ export default function SparesPanel() {
         <div className="drop" onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => { e.preventDefault(); load(e.dataTransfer.files); }}
           onClick={() => pick.current.click()}>
-          {busy ? <><div className="spinner" /><h2>Running the reliability model…</h2></>
+          {busy ? <><div className="spinner" /><h2>Working out the right stock levels…</h2></>
             : <><div className="dropicon">↓</div>
-              <h2>Drop the CM spares workbook here</h2>
-              <p>The <code>.xlsx</code> with the DLP reliability sheet, inventory balance and PRF status. A Poisson base-stock model runs right here in your browser.</p>
+              <h2>Drop the spare-parts workbook here</h2>
+              <p>The <code>.xlsx</code> spreadsheet with three tabs: the <b>design spares list</b> (every part and how often it fails), the <b>current stock</b> (what’s on the shelf), and the <b>orders on the way</b>. The app works out how many of each part you should be holding.</p>
               <button className="cta">Choose file</button></>}
         </div>
         <input ref={pick} type="file" accept=".xlsx,.xls" hidden onChange={(e) => load(e.target.files)} />
         {err && <p className="kbnote" style={{ color: 'var(--crit)' }}>{err}</p>}
         <ul className="how">
-          <li><b>Demand as physics.</b> Failure rate × fleet population × operating hours → expected demand over each part's lead time.</li>
-          <li><b>Base-stock model.</b> Poisson service level tells you how many to hold so a failure doesn't strand a train.</li>
-          <li><b>Validated against Alstom.</b> The model reproduces the manufacturer's own recommendation — so disagreements are findings.</li>
+          <li><b>It works out demand.</b> Using each part’s failure rate, how many are fitted across the fleet, and how long the trains run, it estimates how often you’ll need a replacement.</li>
+          <li><b>It sets safe stock levels.</b> It then calculates how many to keep on the shelf so that, 95% of the time, a spare is ready the moment a part fails — instead of a train waiting weeks for one.</li>
+          <li><b>It checks its own maths against the manufacturer.</b> Alstom’s spreadsheet already includes their own recommended quantity. Our figures line up with theirs almost exactly — which is how you know the model is sound.</li>
         </ul>
       </div>
     );
@@ -66,18 +66,28 @@ export default function SparesPanel() {
   return (
     <main className="main">
       <section className="tiles">
-        <Tile label="Items modelled" value={res.modelledItems} note="with full reliability data" />
-        <Tile label="Below service level" value={res.shortCount} tone="danger" note={`${res.criticalShort} critical`} />
-        <Tile label="Model vs Alstom" value={`r = ${res.modelVsAlstomCorr.toFixed(2)}`} tone="primary" note="independent agreement" />
-        <Tile label="Cash to close gaps" value={`AED ${Math.round(res.cashToClose).toLocaleString()}`} note="at 95% service level" />
+        <Tile label="Parts checked" value={res.modelledItems} note="that have full reliability data" />
+        <Tile label="Not enough in stock" value={res.shortCount} tone="danger" note={`${res.criticalShort} of them are critical parts`} />
+        <Tile label="Agreement with Alstom" value={`${(res.modelVsAlstomCorr * 100).toFixed(0)}%`} tone="primary" note="our maths vs the manufacturer’s" />
+        <Tile label="Cost to fully stock up" value={`AED ${Math.round(res.cashToClose).toLocaleString()}`} note="to be safe on every part" />
         <Tile label="" value={<button className="ghost" onClick={downloadOrderCSV}>Download order list</button>} />
         <Tile label="" value={<button className="ghost" onClick={() => setRes(null)}>Load different file</button>} />
       </section>
 
+      <section className="reduction">
+        <p className="explainer">
+          <b>Why the {(res.modelVsAlstomCorr * 100).toFixed(0)}% agreement matters.</b> We worked out these stock levels from
+          scratch — from how often each part fails and how long it takes to reorder. The manufacturer (Alstom)
+          did their own version years ago. The two match almost perfectly, which tells you the model is trustworthy.
+          So on the rare part where the two <i>don’t</i> match, that’s worth a closer look — it usually means the part
+          is failing more often in real life than the original design assumed.
+        </p>
+      </section>
+
       <section className="controls">
         <div className="tabs">
-          <button className={tab === 'short' ? 'on' : ''} onClick={() => setTab('short')}>Shortfalls ({res.shortCount})</button>
-          <button className={tab === 'delta' ? 'on' : ''} onClick={() => setTab('delta')}>Model vs Alstom</button>
+          <button className={tab === 'short' ? 'on' : ''} onClick={() => setTab('short')}>Not enough in stock ({res.shortCount})</button>
+          <button className={tab === 'delta' ? 'on' : ''} onClick={() => setTab('delta')}>Where we differ from Alstom</button>
         </div>
       </section>
 
@@ -86,10 +96,10 @@ export default function SparesPanel() {
           <table>
             <thead>
               <tr>
-                <th>Item</th><th>Description</th><th style={{ width: 62 }}>λ/yr</th>
-                <th style={{ width: 54 }}>Rec</th><th style={{ width: 54 }}>Hand</th>
-                {tab === 'short' ? <><th style={{ width: 54 }}>Order</th><th style={{ width: 70 }}>Lead</th></>
-                  : <th style={{ width: 64 }}>Alstom</th>}
+                <th>Item</th><th>Description</th><th style={{ width: 62 }}>Need/yr</th>
+                <th style={{ width: 54 }}>Keep</th><th style={{ width: 54 }}>In stock</th>
+                {tab === 'short' ? <><th style={{ width: 54 }}>Order now</th><th style={{ width: 70 }}>Reorder wait</th></>
+                  : <th style={{ width: 64 }}>Alstom says</th>}
                 <th style={{ width: 44 }} />
               </tr>
             </thead>
@@ -123,45 +133,41 @@ export default function SparesPanel() {
               </div>
 
               <div className="facts">
-                <Fact k="Expected demand" v={`${sel.lambdaYear.toFixed(1)} / year`} />
-                <Fact k="Over lead time" v={`${sel.lambdaLead.toFixed(2)} (${sel.leadWeeks} wk)`} />
-                <Fact k="Recommended (95%)" v={sel.recommended} />
-                <Fact k="Alstom Poisson qty" v={Number.isFinite(sel.alstom) ? sel.alstom : '—'} />
-                <Fact k="On hand" v={Number.isFinite(sel.onHand) ? sel.onHand : '—'} />
-                <Fact k="On order" v={sel.onOrder} />
+                <Fact k="Likely needed" v={`${sel.lambdaYear.toFixed(1)} per year`} />
+                <Fact k="During a reorder wait" v={`${sel.lambdaLead.toFixed(2)} (${sel.leadWeeks} wks)`} />
+                <Fact k="Keep on shelf" v={sel.recommended} />
+                <Fact k="Alstom recommends" v={Number.isFinite(sel.alstom) ? sel.alstom : '—'} />
+                <Fact k="In stock now" v={Number.isFinite(sel.onHand) ? sel.onHand : '—'} />
+                <Fact k="Already on order" v={sel.onOrder} />
                 <Fact k="Order now" v={Math.max(sel.gap, 0)} />
-                <Fact k="Unit cost" v={sel.unitCostAED ? `AED ${sel.unitCostAED.toLocaleString()}` : '—'} />
+                <Fact k="Price each" v={sel.unitCostAED ? `AED ${sel.unitCostAED.toLocaleString()}` : '—'} />
               </div>
 
               {sel.gap > 0 && (
                 <section className="block accent">
                   <h3>Action</h3>
                   <p>Order <b>{Math.max(sel.gap, 0)}</b> unit(s) now. At the current holding of {Number.isFinite(sel.onHand) ? sel.onHand : 0}
-                    {sel.onOrder ? ` (+${sel.onOrder} on order)` : ''}, the chance a failure is <b>not</b> covered
-                    from stock over the {sel.leadWeeks}-week lead time exceeds the 5% service threshold.
+                    {sel.onOrder ? ` (+${sel.onOrder} on order)` : ''}, there’s more than a 5% chance you’d run out before a new one arrives (the {sel.leadWeeks}-week reorder wait).
                     {sel.lineCostAED > 0 && <> Line cost ≈ <b>AED {Math.round(sel.lineCostAED).toLocaleString()}</b>.</>}</p>
                 </section>
               )}
 
               {Number.isFinite(sel.alstom) && Math.abs(sel.recommended - sel.alstom) >= 3 && (
                 <section className="block">
-                  <h3>Model vs Alstom</h3>
-                  <p>Our model recommends <b>{sel.recommended}</b>; Alstom's DLP lists <b>{sel.alstom}</b>.
+                  <h3>Our number vs the manufacturer’s</h3>
+                  <p>We recommend keeping <b>{sel.recommended}</b>; the manufacturer’s list says <b>{sel.alstom}</b>.
                     {sel.recommended > sel.alstom
-                      ? ' Our figure is higher — worth checking whether the design failure rate understates field experience for this part.'
-                      : ' Our figure is lower — the DLP may be conservative here.'}</p>
+                      ? ' Ours is higher — this part may be failing more often than the original design assumed, which is worth flagging to the supplier.'
+                      : ' Ours is lower — the manufacturer may simply be playing it safe on this part.'}</p>
                 </section>
               )}
 
               <section className="block">
-                <h3>How this number is derived</h3>
-                <pre className="logic">{`μ(year) = failure_rate × population × ${20}h × 365d
-μ(lead) = μ(year) × lead_weeks / 52
-hold S  = smallest S with  P(demand ≤ S) ≥ 0.95
-          (Poisson CDF)`}</pre>
+                <h3>How we got this number</h3>
+                <p>First, how many we’ll likely need in a year: <b>how often it fails × how many are on the fleet × hours run per year</b>. Then we scale that to the <b>{sel.leadWeeks}-week</b> wait to reorder. Finally we pick the stock level that gives a <b>95% chance</b> a spare is ready the moment one fails.</p>
               </section>
 
-              <p className="disclaimer">Poisson base-stock model, computed in-browser. Operating hours and service level are assumptions (see the CONFIG block); matlab/spares_predictor.m is the reference twin.</p>
+              <p className="disclaimer">Worked out in your browser from the spreadsheet. The operating hours and 95% target are assumptions you can change. The same maths is also available as a MATLAB script for checking offline.</p>
             </div>
           )}
         </aside>

@@ -2,17 +2,82 @@ import { SYSTEM_MNEMONICS } from './parseTrainTracer.js';
 
 /* ============================================================================
  * CM AUTOPILOT — Triage engine
- * Noise filter (TCMS housekeeping) -> storm collapse -> repeat-offender
- * detection -> transparent priority score.
+ * Turns a wall of raw log rows into a short, ranked list of real problems.
  *
- *   score = SEV x recurrence x recency x persistence x repeat
+ *   1. Filter out the routine system chatter that isn't a fault
+ *   2. Merge repeated firings of the same fault into one incident
+ *   3. Spot faults that keep coming back (never properly fixed)
+ *   4. Rank everything by an importance score you can read and argue with:
  *
- * Every term is visible in the UI so the engineer can argue with it.
+ *        score = severity x how-often x how-recent x still-happening x keeps-returning
+ *
+ * Every part of that score is shown in the app, so nothing is a black box.
  * ==========================================================================*/
 
 export const DEFAULTS = { hideSystemEvents: true, hideInformation: true, stormGapMin: 60 };
 const SEV_WEIGHT = { Critical: 100, Major: 40, Minor: 10, Information: 1 };
+export const SEV_RANK = { Critical: 4, Major: 3, Minor: 2, Information: 1 };
 export const SEV_ORDER = ['Critical', 'Major', 'Minor', 'Information'];
+
+/* ---- Plain-language fault names ----------------------------------------
+ * A code like F_TBS_PCE4PropNotOper means nothing to most people. We turn it
+ * into a short phrase anyone can read ("Propulsion unit not working"), while
+ * still showing the original code for the technician who needs the exact one.
+ * The mapping is best-effort: known patterns first, then a tidy-up of the
+ * manual's own description text. */
+const NAME_PATTERNS = [
+  [/PropNotOper|PropFault/i, 'Propulsion unit not working'],
+  [/EDBNotOper/i, 'Electric brake not working'],
+  [/PCE\d*.*Prop/i, 'Propulsion unit not working'],
+  [/EchelonDbleFlt/i, 'Double brake-control failure'],
+  [/CriticalFltPres/i, 'Critical brake fault present'],
+  [/NoBCEMaster/i, 'Brake controller lost its master'],
+  [/DutyCyc/i, 'Air compressor overworking'],
+  [/AirDryer/i, 'Air dryer fault'],
+  [/CMP.*OPInfo/i, 'Compressor contactor fault'],
+  [/IESNotCollFlt|IESNotColl/i, 'Power collection inconsistency'],
+  [/Undershoot/i, 'Train stopped short of target'],
+  [/Overshoot/i, 'Train overshot the stop'],
+  [/FSB/i, 'Full-service braking triggered'],
+  [/CrewSw|crew switch/i, 'Crew switch activated'],
+  [/DoorIsol|DoorNotOper/i, 'Door isolated / not working'],
+  [/ObstDet/i, 'Obstacle detected on door'],
+  [/Cooling/i, 'Air-conditioning cooling fault'],
+  [/TempFlt|TripTemp/i, 'Cabin temperature out of range'],
+  [/Vent/i, 'Ventilation fault'],
+  [/ComNOk|ComNok/i, 'Communication lost with a unit'],
+  [/DPGTransfer/i, 'Network data-transfer event'],
+  [/WSP/i, 'Wheel-slide protection fault'],
+  [/ParkBrk/i, 'Parking-brake fault'],
+  [/EBrake|EmergBrk|EB_/i, 'Emergency-brake event'],
+];
+
+const FUNCTION_PLAIN = {
+  'Traction Brake system': 'Traction & braking',
+  'Braking': 'Braking',
+  'Air Compressor': 'Compressed air',
+  'Access Doors': 'Doors',
+  'Driving': 'Driving / ATO',
+  'High Voltage System': 'High-voltage power',
+  'Medium Voltage System': 'Medium-voltage power',
+  'Train Control Network': 'Onboard network',
+  'Heating Ventilation and Air Conditioning': 'Air-conditioning',
+  'Public Address Intercom': 'PA & intercom',
+  'Automatic Train Control': 'Train control',
+};
+
+export function plainName(mnemonic, description, fn) {
+  for (const [re, label] of NAME_PATTERNS) if (re.test(mnemonic)) return label;
+  // fall back to the manual's description, cleaned up
+  let d = (description || '').trim();
+  if (d) {
+    d = d.replace(/\bfault\b/gi, '').replace(/\bevent\b/gi, '').replace(/\s+/g, ' ').trim();
+    if (d.length > 2) return d.charAt(0).toUpperCase() + d.slice(1);
+  }
+  return FUNCTION_PLAIN[fn] || fn || 'Fault';
+}
+
+export function plainFunction(fn) { return FUNCTION_PLAIN[fn] || fn || 'Other'; }
 
 function recencyFactor(lastMs, nowMs) {
   const days = (nowMs - lastMs) / 86400000;
@@ -53,6 +118,9 @@ export function triage(events, opts = DEFAULTS) {
       incidents.push({
         id: `${key}|${first.occurrence}`, trainset: first.trainset, mnemonic: first.mnemonic,
         tcode: first.tcode, description: first.description, severity: first.severity,
+        plainName: plainName(first.mnemonic, first.description, first.fn),
+        plainFn: plainFunction(first.fn),
+        severityRank: SEV_RANK[first.severity] ?? 0,
         hint: first.hint, fn: first.fn, location: first.location, locationCode: first.locationCode,
         stack: first.stack, firstSeen: first.occurrence, lastSeen: last.occurrence,
         firings: group.reduce((s, g) => s + (g.counter || 1), 0), rows: group.length,
@@ -91,7 +159,9 @@ export function triage(events, opts = DEFAULTS) {
     inc.scoreParts = { sev, rec: +rec.toFixed(2), age: +age.toFixed(2), per, rpt: +rpt.toFixed(2) };
   }
 
-  incidents.sort((a, b) => b.score - a.score);
+  // Default order: most critical first, and within the same severity, the
+  // highest-scoring (most urgent) first.
+  incidents.sort((a, b) => (b.severityRank - a.severityRank) || (b.score - a.score));
 
   stats.incidents = incidents.length;
   stats.badActors = [...new Set(incidents.filter((i) => i.repeats >= 3)
@@ -107,7 +177,7 @@ export function summarise(incidents) {
   const bySeverity = {}, byFunction = {}, byTrainset = {};
   for (const i of incidents) {
     bySeverity[i.severity] = (bySeverity[i.severity] || 0) + 1;
-    byFunction[i.fn || 'Unknown'] = (byFunction[i.fn || 'Unknown'] || 0) + 1;
+    byFunction[i.plainFn || 'Other'] = (byFunction[i.plainFn || 'Other'] || 0) + 1;
     byTrainset[i.trainset] = (byTrainset[i.trainset] || 0) + 1;
   }
   return { bySeverity, byFunction, byTrainset };
@@ -125,4 +195,19 @@ export function fmtDuration(ms) {
   const hrs = mins / 60;
   if (hrs < 48) return `${hrs.toFixed(1)} h`;
   return `${(hrs / 24).toFixed(1)} d`;
+}
+
+// Sort helper used by the dropdown in the UI.
+export const SORT_OPTIONS = {
+  'critical-first': { label: 'Most critical first', fn: (a, b) => (b.severityRank - a.severityRank) || (b.score - a.score) },
+  'least-first': { label: 'Least critical first', fn: (a, b) => (a.severityRank - b.severityRank) || (a.score - b.score) },
+  'importance': { label: 'Overall importance', fn: (a, b) => b.score - a.score },
+  'most-frequent': { label: 'Happens most often', fn: (a, b) => b.firings - a.firings },
+  'most-returns': { label: 'Comes back the most', fn: (a, b) => b.repeats - a.repeats || b.score - a.score },
+  'newest': { label: 'Most recent', fn: (a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0) },
+};
+
+export function sortIncidents(incidents, key) {
+  const opt = SORT_OPTIONS[key] || SORT_OPTIONS['critical-first'];
+  return [...incidents].sort(opt.fn);
 }

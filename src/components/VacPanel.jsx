@@ -14,7 +14,7 @@ export default function VacPanel() {
 
   async function load(files) {
     const list = Array.from(files).filter((f) => /\.(xls|csv|txt)$/i.test(f.name));
-    if (!list.length) { setErr('Drop the raw SCU log files (the .xls exports from the train).'); return; }
+    if (!list.length) { setErr('Drop the air-conditioning log files (the .xls files taken off the train).'); return; }
     setBusy(true); setErr(null);
     const out = [];
     for (const f of list) {
@@ -37,16 +37,16 @@ export default function VacPanel() {
           onClick={() => pick.current.click()}>
           {busy ? <><div className="spinner" /><h2>Analysing…</h2></>
             : <><div className="dropicon">↓</div>
-              <h2>Drop VAC SCU logs here</h2>
-              <p>The raw <code>.xls</code> logs straight off the train — one or many. The health engine runs right here in your browser.</p>
+              <h2>Drop air-conditioning logs here</h2>
+              <p>The <code>.xls</code> log files from the air-conditioning units — one or many at once. The app checks each unit’s health right here in your browser.</p>
               <button className="cta">Choose files</button></>}
         </div>
         <input ref={pick} type="file" multiple accept=".xls,.csv,.txt" hidden onChange={(e) => load(e.target.files)} />
         {err && <p className="kbnote" style={{ color: 'var(--crit)' }}>{err}</p>}
         <ul className="how">
-          <li><b>Physics, not alarm-counting.</b> Cooling ΔT, compression ratio, condenser fouling, contactor integrity — a 0–100 health index.</li>
-          <li><b>Catches what the spreadsheet misses.</b> A unit can be degrading badly with almost no pressure alarms fired.</li>
-          <li><b>Fleet view.</b> Drop every car's log in at once; worst-ranked first.</li>
+          <li><b>It reads the actual measurements, not just alarms.</b> How well the unit cools, its refrigerant pressures, whether the coil is blocked — turned into a simple 0–100 health score.</li>
+          <li><b>Spots trouble early.</b> A unit can be failing badly while barely setting off any alarms — this catches that before passengers feel it.</li>
+          <li><b>See the whole fleet.</b> Drop in every car’s log at once and the worst units rise to the top.</li>
         </ul>
       </div>
     );
@@ -55,7 +55,7 @@ export default function VacPanel() {
   return (
     <main className="main">
       <section className="tiles">
-        <Tile label="Units assessed" value={units.length} />
+        <Tile label="Units checked" value={units.length} />
         <Tile label="Degraded" tone="danger" value={units.filter((u) => u.health < 50).length} note="intervene now" />
         <Tile label="Watch" tone="danger" value={units.filter((u) => u.health >= 50 && u.health < 70).length} note="plan maintenance" />
         <Tile label="Healthy" tone="primary" value={units.filter((u) => u.health >= 70).length} />
@@ -68,7 +68,7 @@ export default function VacPanel() {
           <table>
             <thead>
               <tr><th>Unit</th><th style={{ width: 104 }}>Health</th><th style={{ width: 64 }}>ΔT</th>
-                <th style={{ width: 64 }}>HP/LP</th><th style={{ width: 78 }}>Not cooling</th><th>Verdict</th></tr>
+                <th style={{ width: 64 }}>HP/LP</th><th style={{ width: 78 }}>Cooling gaps</th><th>Verdict</th></tr>
             </thead>
             <tbody>
               {units.map((u, i) => (
@@ -92,15 +92,15 @@ export default function VacPanel() {
                 <div>
                   <span className={`sev sev-${band(sel.health) === 'crit' ? 'critical' : band(sel.health) === 'warn' ? 'major' : 'information'}`}>{sel.verdict}</span>
                   <h2>T{sel.trainset} · Car {sel.car} · VAC{sel.vac}</h2>
-                  <p className="cdesc">Health index <b>{sel.health.toFixed(1)} / 100</b> · {sel.assessed} of {sel.samples} samples assessed</p>
+                  <p className="cdesc">Health score <b>{sel.health.toFixed(1)} / 100</b> · based on {sel.assessed} readings while the unit was running</p>
                 </div>
               </div>
 
               <Spark series={sel.series} />
 
               <div className="facts">
-                <Fact k="Cooling ΔT" v={`${sel.cooling.dT_median?.toFixed(2)} °C`} />
-                <Fact k="Not cooling" v={`${sel.cooling.notCoolingPct?.toFixed(1)}% of run time`} />
+                <Fact k="Cooling power" v={`${sel.cooling.dT_median?.toFixed(1)} °C drop`} />
+                <Fact k="Time not cooling properly" v={`${sel.cooling.notCoolingPct?.toFixed(1)}% of the time it ran`} />
                 {sel.circuits.map((c) => (
                   <React.Fragment key={c.circuit}>
                     <Fact k={`Circuit ${c.circuit} LP/HP`} v={`${c.LP_med?.toFixed(2)} / ${c.HP_med?.toFixed(2)} bar`} />
@@ -112,11 +112,11 @@ export default function VacPanel() {
               </div>
 
               <section className="block">
-                <h3>Score breakdown</h3>
+                <h3>What makes up the score</h3>
                 {Object.entries(sel.scoreParts).map(([k, v]) => {
                   const max = { cooling: 40, charge: 20, cycling: 20, contactor: 10, flags: 10 }[k];
                   return (
-                    <div key={k} className="sbar"><span>{k}</span>
+                    <div key={k} className="sbar"><span>{({cooling:'cooling',charge:'refrigerant',cycling:'on/off pattern',contactor:'electrics',flags:'alarms'})[k]||k}</span>
                       <div className="strack"><div className="sfill" style={{ width: `${(v / max) * 100}%` }} /></div>
                       <b>{v.toFixed(1)}/{max}</b></div>
                   );
@@ -124,7 +124,7 @@ export default function VacPanel() {
               </section>
 
               <section className="block">
-                <h3>Compressors</h3>
+                <h3>The four compressors</h3>
                 <table className="traces">
                   <thead><tr><th>#</th><th>Duty</th><th>Cycles</th><th>Median run</th><th>Short</th><th>Contactor</th></tr></thead>
                   <tbody>
@@ -139,11 +139,11 @@ export default function VacPanel() {
               </section>
 
               <section className="block accent">
-                <h3>Diagnosis</h3>
+                <h3>What we think is going on</h3>
                 <ol className="remedy">{sel.diagnosis.map((d, i) => <li key={i}>{d}</li>)}</ol>
               </section>
 
-              <p className="disclaimer">Computed in-browser from the raw SCU log. Thresholds are engineering assumptions until confirmed against the SCU set-points — the same physics is available as matlab/vac_health.m for offline validation.</p>
+              <p className="disclaimer">Worked out in your browser from the unit’s own log. The healthy/unhealthy cut-offs are sensible starting values you can adjust once the real set-points are confirmed. The same maths is available as a MATLAB script for checking offline.</p>
             </div>
           )}
         </aside>
@@ -176,4 +176,4 @@ function Spark({ series }) {
 function Tile({ label, value, note, tone }) {
   return <div className={`tile ${tone || ''}`}><div className="tval">{value}</div><div className="tlab">{label}</div>{note && <div className="tnote">{note}</div>}</div>;
 }
-function Fact({ k, v }) { return <div className="fact"><span>{k}</span><b>{v}</b></div>; }
+function Fact({ k, v }) { return <div className="fact"><span>{({cooling:'cooling',charge:'refrigerant',cycling:'on/off pattern',contactor:'electrics',flags:'alarms'})[k]||k}</span><b>{v}</b></div>; }

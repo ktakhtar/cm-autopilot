@@ -26,7 +26,8 @@ npm install
 npm run dev
 ```
 
-## Knowledge base
-`public/kb/faults_kb.json` — machine-readable index of
-AAGC-N0001-RSK-MTV-SYW-MAN-000091 Rev H (152 IOS procedures). Used with written
-RTA permission; shipped as a separate loadable file, not compiled in.
+## Repair guide
+`public/kb/faults_kb.json` — a machine-readable index of the Route 2020 train
+troubleshooting manual (152 fault procedures), kept as a separate loadable file
+so it can be swapped or updated without touching the app. It should be used
+alongside the current controlled manual, not in place of it.

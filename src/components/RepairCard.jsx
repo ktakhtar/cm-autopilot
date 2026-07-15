@@ -12,9 +12,9 @@ export default function RepairCard({ incident: inc, kbResult }) {
       <div className="cardhead">
         <div>
           <span className={`sev sev-${(inc.severity || 'x').toLowerCase()}`}>{inc.severity}</span>
-          {inc.endedActive && <span className="live">STILL ACTIVE</span>}
-          <h2>{inc.mnemonic}</h2>
-          <p className="cdesc">{inc.description}</p>
+          {inc.endedActive && <span className="live">STILL HAPPENING</span>}
+          <h2>{inc.plainName}</h2>
+          <p className="cdesc"><span className="codetag">{inc.mnemonic}</span> · {inc.description}</p>
         </div>
         <button className="ghost sm" onClick={copy}>Copy</button>
       </div>
@@ -32,29 +32,29 @@ export default function RepairCard({ incident: inc, kbResult }) {
       </div>
 
       <div className="scoreline">
-        <b>Priority {Math.round(inc.score)}</b>
-        <span className="dim">= severity {inc.scoreParts.sev} × recurrence {inc.scoreParts.rec} × recency {inc.scoreParts.age} × persistence {inc.scoreParts.per} × repeat {inc.scoreParts.rpt}</span>
+        <b>Priority score {Math.round(inc.score)}</b>
+        <span className="dim">how bad ({inc.scoreParts.sev}) × how often ({inc.scoreParts.rec}) × how recent ({inc.scoreParts.age}) × still happening ({inc.scoreParts.per}) × keeps returning ({inc.scoreParts.rpt}). Higher means look at it sooner.</span>
       </div>
 
       {inc.repeats >= 3 && (
         <section className="block repeatbanner">
-          <h3>Repeat offender</h3>
-          <p>This exact fault has returned <b>{inc.repeats} separate times</b> on trainset {inc.trainset} at {inc.location}. Previous corrective actions did not hold. Treat as a <b>recurring defect</b>, not a fresh fault — escalate rather than reset.</p>
+          <h3>This one keeps coming back</h3>
+          <p>This exact problem has come back <b>{inc.repeats} separate times</b> on train {inc.trainset} at {inc.location}. Earlier fixes did not hold, so this isn’t a fresh fault — it’s an ongoing one. Worth escalating rather than just resetting it again.</p>
         </section>
       )}
 
-      {sys && <Block title="Not a defect"><p className="note">{sys}</p></Block>}
-      {match === 'none' && !sys && <Block title="No manual entry"><p className="note">This mnemonic is not indexed in Volume 3. It may be a subsystem-internal code — check the subsystem's own repair manual.</p></Block>}
+      {sys && <Block title="This isn’t a fault"><p className="note">{sys}</p></Block>}
+      {match === 'none' && !sys && <Block title="Not in the manual index"><p className="note">This fault code isn’t in the main troubleshooting manual. It may belong to a specific sub-system — check that sub-system’s own repair manual.</p></Block>}
 
       {entry && (
         <>
-          <Block title={match === 'exact' ? 'Manual procedure' : 'Nearest manual section'}>
+          <Block title={match === 'exact' ? 'How to fix it (from the manual)' : 'Closest manual section'}>
             <div className="iosbar">{entry.ios && <span className="ios">{entry.ios}</span>}<span className="secref">§{entry.section} · page {entry.page}</span></div>
             <h4>{entry.title}</h4>
             {entry.description && <p>{entry.description}</p>}
           </Block>
-          {entry.reason && <Block title="Trigger condition"><pre className="logic">{entry.reason}</pre></Block>}
-          {entry.remedy?.length > 0 && <Block title="Remedial action" accent><ol className="remedy">{entry.remedy.map((r, i) => <li key={i}>{r}</li>)}</ol></Block>}
+          {entry.reason && <Block title="What sets this fault off"><pre className="logic">{entry.reason}</pre></Block>}
+          {entry.remedy?.length > 0 && <Block title="Steps to fix it" accent><ol className="remedy">{entry.remedy.map((r, i) => <li key={i}>{r}</li>)}</ol></Block>}
           {(entry.breakers?.length > 0 || entry.locations?.length > 0) && (
             <Block title="Circuit breakers to check">
               <div className="chips">{entry.breakers.map((b) => <span key={b} className="chip cb">{b}</span>)}</div>
@@ -67,13 +67,13 @@ export default function RepairCard({ incident: inc, kbResult }) {
             </Block>
           )}
           {entry.associatedOCS?.length > 0 && (
-            <Block title="Associated OCS alarm(s)"><div className="chips">{entry.associatedOCS.slice(0, 12).map((o) => <span key={o} className="chip">{o}</span>)}</div></Block>
+            <Block title="Related driver-cab alarm(s)"><div className="chips">{entry.associatedOCS.slice(0, 12).map((o) => <span key={o} className="chip">{o}</span>)}</div></Block>
           )}
         </>
       )}
 
       {inc.traces?.length > 0 && (
-        <Block title={`Freeze frame — ${inc.traces.length} signals captured at the moment of fault`}>
+        <Block title={`What the train was doing at that moment (${inc.traces.length} signals)`}>
           <table className="traces">
             <thead><tr><th>Signal</th>{inc.traceHeaders.map((h) => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>
@@ -88,11 +88,11 @@ export default function RepairCard({ incident: inc, kbResult }) {
               })}
             </tbody>
           </table>
-          <p className="note">Highlighted rows are signals that <b>changed state</b> across the fault window — these are the ones worth looking at.</p>
+          <p className="note">The highlighted rows are the signals that <b>changed</b> right as the fault happened — usually the best clue to the cause.</p>
         </Block>
       )}
 
-      <p className="disclaimer">Generated index of AAGC-N0001-RSK-MTV-SYW-MAN-000091 Rev H. Always confirm against the controlled manual before intervention.</p>
+      <p className="disclaimer">Built from the official Route 2020 troubleshooting manual. Always double-check against the current controlled manual before starting work.</p>
     </div>
   );
 }
