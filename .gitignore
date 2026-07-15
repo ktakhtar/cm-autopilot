@@ -1,4 +1,4 @@
-# ---- Dependencies / build ----
+# Dependencies / build
 node_modules
 dist
 .vercel
@@ -6,8 +6,6 @@ dist
 *.log
 
 # ---- HARD BLOCK: OPERATIONAL DATA MUST NEVER BE COMMITTED ----
-# CM Autopilot processes everything in the browser. No fault data,
-# no train logs, no Maximo exports, and no manuals belong in git.
 *.csv
 *.xls
 *.xlsx
