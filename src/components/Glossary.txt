@@ -12,7 +12,7 @@ const GLOSSARY = [
       ['AIR', 'Compressed air', 'Makes and stores the compressed air used for brakes and doors.'],
       ['BRK', 'Braking', 'The braking system and its control units.'],
       ['TBS', 'Traction & braking', 'Combined traction (making the train move) and braking control.'],
-      ['CLM', 'Air-conditioning (HVAC)', 'Heating, ventilation and air-conditioning for the cabins.'],
+      ['CLM', 'Air-conditioning', 'Cooling and ventilation for the passenger cabins.'],
       ['CPL', 'Coupling', 'The couplers that join train cars together.'],
       ['DRS', 'Doors', 'The passenger access doors.'],
       ['DRV', 'Driving / ATO', 'Driving and Automatic Train Operation.'],
