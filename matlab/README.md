@@ -1,26 +1,40 @@
-# CM Autopilot — MATLAB reference engine
+# CM Autopilot — MATLAB reference engines
 
-`vac_health.m` — base MATLAB only, no toolboxes.
+Base MATLAB only. No toolboxes.
 
+## vac_health.m — VAC health (reference twin of the in-browser engine)
 ```matlab
 >> vac_health('T5125_car_A_vac_1.xls')
 ```
+Same physics and health index as the web app's VAC tab. Produces the 6-panel
+diagnostic figure and writes the spreadsheet row.
 
-This is the **offline twin** of the in-browser VAC engine. The end user never
-needs MATLAB — the web app runs the same physics. This script exists to:
-- validate the browser model (same health index on the same log),
-- produce the 6-panel publication-quality diagnostic figure,
-- write `vac_template_row.csv` for the existing VAC Logs spreadsheet.
+## spares_predictor.m — Poisson base-stock spares model
+```matlab
+>> spares_predictor('CM_spare_need_urgently_Updated_on_24_04.xlsx')
+```
 
-## The finding
-On the reference log (T5125, Car A) the SCU raised `LPT1_LOW` once in 4,930
-samples — the current spreadsheet method calls that healthy. The physics
-(cooling ΔT 6.7 °C vs 8–12 healthy; compression ratio 3.2 vs 3.5–4.5) says it
-is an undercharged circuit. Score **66/100, WATCH**.
+Reliability-engineering model of the CM spares holding.
 
-## A note on short cycling
-This SCU log is event-based (~10 min between rows), not periodic. Run-length
-"short cycling" on sparse timestamps is a weak signal, so it is **displayed but
-given low weight** in the score. Don't oversell it in a room — the timestamps
-can't support a hard claim. The score is driven by the metrics the data does
-support: cooling ΔT and compression ratio.
+**Model.** A part with failure rate λ, fleet population N, running H hours/year,
+fails as a Poisson process. Expected demand over its lead time L is
+`μ = λ·N·H·(L/52)`. The spares to hold for a 95% service level is the smallest
+S with Poisson CDF(S; μ) ≥ 0.95 — the classic (S−1,S) base-stock model.
+Compare to on-hand and on-order; the gap is the order list.
+
+**Validation.** The DLP sheet carries Alstom's own Poisson-recommended quantity.
+This independent model reproduces it at **r = 0.96**, so a disagreement on a
+specific part is a genuine finding, not model error.
+
+**Findings on the reference workbook (404 items with complete data):**
+- 56 items are below the 95%-service stock level for their lead time
+- 21 of those are flagged Critical
+- ≈ AED 3.9M to close every gap at 95% service
+- highest-demand parts: LED strips, contactors, the ELM battery-box RC, axlebox
+  bearing, traction control unit
+
+**Outputs:** ranked report, 4-panel figure, `spares_order_list.csv`,
+`spares_predictor.json`.
+
+**Assumptions** (operating hours, service level) live in the `CFG` block and
+nowhere else — change them there when you have the real figures.

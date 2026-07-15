@@ -4,6 +4,7 @@ import { loadKB, lookup, SYSTEM_EVENT_MEANING } from './lib/kb.js';
 import { triage, summarise, DEFAULTS, SEV_ORDER, fmtDate, fmtDuration } from './lib/triage.js';
 import RepairCard from './components/RepairCard.jsx';
 import VacPanel from './components/VacPanel.jsx';
+import SparesPanel from './components/SparesPanel.jsx';
 
 export default function App() {
   const [kbReady, setKbReady] = useState(false);
@@ -61,6 +62,7 @@ export default function App() {
         <nav className="tabs">
           <button className={tab === 'faults' ? 'on' : ''} onClick={() => setTab('faults')}>Fault triage</button>
           <button className={tab === 'vac' ? 'on' : ''} onClick={() => setTab('vac')}>VAC health</button>
+          <button className={tab === 'spares' ? 'on' : ''} onClick={() => setTab('spares')}>Spares <span className="pill">MATLAB</span></button>
         </nav>
 
         <div className="privacy" title="Files are read by JavaScript inside this browser tab. Nothing is transmitted.">
@@ -69,6 +71,7 @@ export default function App() {
       </header>
 
       {tab === 'vac' && <VacPanel />}
+      {tab === 'spares' && <SparesPanel />}
 
       {tab === 'faults' && !parsed && (
         <Landing kbReady={kbReady} busy={busy} onPick={() => inputRef.current.click()} onDrop={handleFiles} />

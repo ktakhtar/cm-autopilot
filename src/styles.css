@@ -146,3 +146,4 @@ td{padding:8px 10px;vertical-align:middle}
 .spark{background:var(--bg3);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:4px}
 .sparklab{font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
 .sparkkey{display:flex;gap:14px;font-size:9.5px;margin-top:2px}
+.pill{background:rgba(88,166,255,.15);color:var(--inf);border:1px solid rgba(88,166,255,.3);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:800;letter-spacing:.5px;margin-left:5px}
